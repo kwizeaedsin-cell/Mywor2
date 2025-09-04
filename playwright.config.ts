@@ -8,8 +8,9 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: 'list',
   use: {
-    headless: true,
-    viewport: { width: 1280, height: 720 },
+  headless: true,
+  baseURL: 'http://localhost:4173',
+  viewport: { width: 1280, height: 720 },
     actionTimeout: 0,
     trace: 'on-first-retry',
   },
