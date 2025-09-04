@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogOut, User } from 'lucide-react';
@@ -33,8 +34,10 @@ const Navigation = () => {
             </span>
           </Link>
 
-          {/* User Menu */}
+          {/* User Menu & Theme Toggle */}
           <div className="flex items-center space-x-4">
+            {/* Theme Toggle Button */}
+            <ThemeToggle />
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

@@ -37,7 +37,9 @@ const ClientDashboard = () => {
     service_id: '',
     description: '',
     priority: 'medium',
-    documents: []
+    documents: [],
+    id_number: '',
+    id_document: ''
   });
 
   useEffect(() => {
@@ -67,7 +69,11 @@ const ClientDashboard = () => {
         .eq('client_id', user.id)
         .order('created_at', { ascending: false });
         
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        toast.error('Failed to submit request: ' + (error.message || error.details || 'Unknown error'));
+        return;
+      }
       setRequests(data || []);
     } catch (error) {
       toast.error('Failed to fetch requests');
@@ -146,14 +152,25 @@ const ClientDashboard = () => {
     }
 
     try {
+      let serviceId: number | null = null;
+      let serviceName: string | null = null;
+      if (!isNaN(Number(newRequest.service_id))) {
+        serviceId = Number(newRequest.service_id);
+      } else {
+        serviceName = newRequest.service_id;
+      }
       const { data, error } = await supabase
         .from('government_requests')
         .insert({
           client_id: user.id,
-          service_id: parseInt(newRequest.service_id),
+          service_id: serviceId,
+          service_name: serviceName,
           description: newRequest.description,
           priority: newRequest.priority,
-          status: 'pending_admin_review'
+          status: 'pending_admin_review',
+          documents: newRequest.documents.length > 0 ? newRequest.documents : null,
+          id_number: newRequest.id_number || null,
+          id_document: newRequest.id_document || null
         })
         .select()
         .single();
@@ -195,7 +212,9 @@ const ClientDashboard = () => {
         service_id: '',
         description: '',
         priority: 'medium',
-        documents: []
+        documents: [],
+        id_number: '',
+        id_document: ''
       });
 
       fetchRequests();
@@ -204,12 +223,22 @@ const ClientDashboard = () => {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // TODO: Implement actual file upload to Supabase Storage
-    toast('Document upload will be implemented with Supabase Storage');
+    const uploadedDocs: string[] = [];
+    for (const file of Array.from(files)) {
+      const filePath = `${user.id}/${Date.now()}_${file.name}`;
+      const { data, error } = await supabase.storage.from('documents').upload(filePath, file);
+      if (error) {
+        toast.error(`Failed to upload ${file.name}`);
+      } else {
+        uploadedDocs.push(filePath);
+        toast.success(`${file.name} uploaded successfully`);
+      }
+    }
+    setNewRequest({ ...newRequest, documents: uploadedDocs });
   };
 
   const markNotificationAsRead = async (notificationId: string) => {
@@ -299,7 +328,7 @@ const ClientDashboard = () => {
                 New Request
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Submit New Government Service Request</DialogTitle>
               </DialogHeader>
@@ -311,12 +340,21 @@ const ClientDashboard = () => {
                       <SelectValue placeholder="Select a service" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="irembo">Irembo</SelectItem>
-                      <SelectItem value="rra_tax">RRA Tax</SelectItem>
-                      <SelectItem value="rdb">RDB</SelectItem>
-                      <SelectItem value="brd">BRD</SelectItem>
-                      <SelectItem value="news">News</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      {services.length === 0 ? (
+                        <>
+                          <div className="p-2 text-sm text-muted-foreground">No services found in database. Using fallback options:</div>
+                          <SelectItem value="irembo">Irembo</SelectItem>
+                          <SelectItem value="rra">RRA (tax declarations)</SelectItem>
+                          <SelectItem value="iecms">IECMS</SelectItem>
+                          <SelectItem value="rdb">RDB</SelectItem>
+                          <SelectItem value="news">News</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </>
+                      ) : (
+                        services.map((service: any) => (
+                          <SelectItem key={service.id} value={service.id.toString()}>{service.name}</SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -327,12 +365,27 @@ const ClientDashboard = () => {
                     id="id_field"
                     placeholder="Enter your ID number"
                     className="mb-2"
+                    value={newRequest.id_number || ''}
+                    onChange={e => setNewRequest({ ...newRequest, id_number: e.target.value })}
                   />
                   <div className="text-center text-sm text-muted-foreground mb-2">Or</div>
                   <Input
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                     className="cursor-pointer"
+                    onChange={async (e) => {
+                      const files = e.target.files;
+                      if (!files || files.length === 0) return;
+                      const file = files[0];
+                      const filePath = `${user.id}/id_${Date.now()}_${file.name}`;
+                      const { error } = await supabase.storage.from('documents').upload(filePath, file);
+                      if (error) {
+                        toast.error(`Failed to upload ID document`);
+                      } else {
+                        setNewRequest({ ...newRequest, id_document: filePath });
+                        toast.success(`ID document uploaded successfully`);
+                      }
+                    }}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Upload ID document (PDF, JPG, PNG, DOC, DOCX)
@@ -396,7 +449,7 @@ const ClientDashboard = () => {
                   </div>
                 </div>
                 
-                <Button onClick={handleSubmitRequest} className="w-full">
+                <Button onClick={handleSubmitRequest} className="w-full" disabled={!newRequest.service_id}>
                   Submit Request
                 </Button>
               </div>
