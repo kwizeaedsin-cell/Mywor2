@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/ui/pagination';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,6 +22,8 @@ import {
   User,
   MessageCircle
 } from 'lucide-react';
+
+
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -28,8 +31,14 @@ import { toast } from 'sonner';
 const ClientDashboard = () => {
   const { user } = useAuth();
   const [requests, setRequests] = useState([]);
+  const [requestPage, setRequestPage] = useState(1);
+  const REQUESTS_PER_PAGE = 10;
+  const [totalRequests, setTotalRequests] = useState(0);
   const [services, setServices] = useState([]);
   const [documents, setDocuments] = useState([]);
+  const [documentPage, setDocumentPage] = useState(1);
+  const DOCUMENTS_PER_PAGE = 10;
+  const [totalDocuments, setTotalDocuments] = useState(0);
   const [statusHistory, setStatusHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +55,7 @@ const ClientDashboard = () => {
     if (user) {
       fetchAllData();
     }
-  }, [user]);
+  }, [user, requestPage, documentPage]);
 
   const fetchAllData = async () => {
     await Promise.all([
@@ -60,21 +69,21 @@ const ClientDashboard = () => {
 
   const fetchRequests = async () => {
     try {
-      const { data, error } = await supabase
+      const from = (requestPage - 1) * REQUESTS_PER_PAGE;
+      const to = from + REQUESTS_PER_PAGE - 1;
+      const { data, error, count } = await supabase
         .from('government_requests')
-        .select(`
-          *,
-          government_services(name, base_cost)
-        `)
+        .select(`*, government_services(name, base_cost)`, { count: 'exact' })
         .eq('client_id', user.id)
-        .order('created_at', { ascending: false });
-        
+        .order('created_at', { ascending: false })
+        .range(from, to);
       if (error) {
         console.error('Supabase error:', error);
-        toast.error('Failed to submit request: ' + (error.message || error.details || 'Unknown error'));
+        toast.error('Failed to fetch requests: ' + (error.message || error.details || 'Unknown error'));
         return;
       }
       setRequests(data || []);
+      setTotalRequests(count || 0);
     } catch (error) {
       toast.error('Failed to fetch requests');
     }
@@ -97,17 +106,17 @@ const ClientDashboard = () => {
 
   const fetchDocuments = async () => {
     try {
-      const { data, error } = await supabase
+      const from = (documentPage - 1) * DOCUMENTS_PER_PAGE;
+      const to = from + DOCUMENTS_PER_PAGE - 1;
+      const { data, error, count } = await supabase
         .from('document_uploads')
-        .select(`
-          *,
-          government_requests(description)
-        `)
+        .select(`*, government_requests(description)`, { count: 'exact' })
         .eq('user_id', user.id)
-        .order('uploaded_at', { ascending: false });
-        
+        .order('uploaded_at', { ascending: false })
+        .range(from, to);
       if (error) throw error;
       setDocuments(data || []);
+      setTotalDocuments(count || 0);
     } catch (error) {
       console.error('Error fetching documents:', error);
     }
@@ -251,6 +260,33 @@ const ClientDashboard = () => {
       fetchNotifications();
     } catch (error) {
       console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const handleDownload = async (filePath: string, filename?: string) => {
+    try {
+      // Try to download the file via the authenticated Supabase client
+      const { data, error } = await supabase.storage.from('documents').download(filePath);
+      if (error) {
+        // If download fails (for permissions or other reasons), try a signed URL fallback
+        const { data: urlData, error: urlError } = await supabase.storage.from('documents').createSignedUrl(filePath, 60);
+        if (urlError) throw urlError;
+        // open signed URL in new tab
+        window.open(urlData.signedUrl, '_blank');
+        return;
+      }
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || filePath.split('/').pop() || 'download';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading file:', err);
+      toast.error('Failed to download file');
     }
   };
 
@@ -533,63 +569,69 @@ const ClientDashboard = () => {
                     <p className="text-muted-foreground">Click "New Request" to submit your first government service request</p>
                   </div>
                 ) : (
-                  requests.map((request) => {
-                    const StatusIcon = getStatusIcon(request.status);
-                    
-                    return (
-                      <div key={request.id} className="p-4 border rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <div className="flex items-center space-x-2">
-                              <StatusIcon className="h-4 w-4" />
-                              <h3 className="font-medium">{request.government_services?.name || 'Government Service'}</h3>
-                              <Badge variant={getStatusColor(request.status)}>
-                                {request.status.replace('_', ' ')}
-                              </Badge>
-                              <Badge variant={getPriorityColor(request.priority)}>
-                                {request.priority}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground">{request.description}</p>
-                            <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                              <span>Submitted: {new Date(request.created_at).toLocaleDateString()}</span>
-                              {request.final_fee && (
-                                <span className="font-medium text-green-600">Fee: ${request.final_fee}</span>
-                              )}
-                              {request.estimated_completion_days && (
-                                <span>Est. completion: {request.estimated_completion_days} days</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => fetchStatusHistory(request.id)}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              Track Status
-                            </Button>
-                          </div>
-                        </div>
-                        
-                        {/* Status History */}
-                        {statusHistory.length > 0 && statusHistory[0]?.request_id === request.id && (
-                          <div className="mt-3 pt-3 border-t">
-                            <h4 className="text-sm font-medium mb-2">Status History</h4>
+                  <>
+                    {requests.map((request) => {
+                      const StatusIcon = getStatusIcon(request.status);
+                      return (
+                        <div key={request.id} className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between">
                             <div className="space-y-1">
-                              {statusHistory.slice(0, 3).map((history) => (
-                                <div key={history.id} className="text-xs text-muted-foreground">
-                                  <span className="font-medium">{history.new_status}</span> - {new Date(history.changed_at).toLocaleString()}
-                                  {history.change_reason && <span> ({history.change_reason})</span>}
-                                </div>
-                              ))}
+                              <div className="flex items-center space-x-2">
+                                <StatusIcon className="h-4 w-4" />
+                                <h3 className="font-medium">{request.government_services?.name || 'Government Service'}</h3>
+                                <Badge variant={getStatusColor(request.status)}>
+                                  {request.status.replace('_', ' ')}
+                                </Badge>
+                                <Badge variant={getPriorityColor(request.priority)}>
+                                  {request.priority}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{request.description}</p>
+                              <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+                                <span>Submitted: {new Date(request.created_at).toLocaleDateString()}</span>
+                                {request.final_fee && (
+                                  <span className="font-medium text-green-600">Fee: ${request.final_fee}</span>
+                                )}
+                                {request.estimated_completion_days && (
+                                  <span>Est. completion: {request.estimated_completion_days} days</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => fetchStatusHistory(request.id)}
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                Track Status
+                              </Button>
                             </div>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })
+                          {/* Status History */}
+                          {statusHistory.length > 0 && statusHistory[0]?.request_id === request.id && (
+                            <div className="mt-3 pt-3 border-t">
+                              <h4 className="text-sm font-medium mb-2">Status History</h4>
+                              <div className="space-y-1">
+                                {statusHistory.slice(0, 3).map((history) => (
+                                  <div key={history.id} className="text-xs text-muted-foreground">
+                                    <span className="font-medium">{history.new_status}</span> - {new Date(history.changed_at).toLocaleString()}
+                                    {history.change_reason && <span> ({history.change_reason})</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <Pagination
+                      currentPage={requestPage}
+                      totalItems={totalRequests}
+                      pageSize={REQUESTS_PER_PAGE}
+                      onPageChange={setRequestPage}
+                    />
+                  </>
                 )}
               </div>
             </CardContent>
@@ -610,26 +652,34 @@ const ClientDashboard = () => {
                     <p className="text-muted-foreground">Documents will appear here when you submit requests with attachments</p>
                   </div>
                 ) : (
-                  documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <FileText className="h-8 w-8 text-blue-500" />
-                        <div>
-                          <p className="font-medium">{doc.filename}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {doc.government_requests?.description || 'Related to request'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Uploaded: {new Date(doc.uploaded_at).toLocaleDateString()}
-                          </p>
+                  <>
+                    {documents.map((doc) => (
+                      <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <FileText className="h-8 w-8 text-blue-500" />
+                          <div>
+                            <p className="font-medium">{doc.filename}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {doc.government_requests?.description || 'Related to request'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Uploaded: {new Date(doc.uploaded_at).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
+                        <Button variant="outline" size="sm" onClick={() => handleDownload(doc.file_path, doc.filename)}>
+                          <Download className="h-4 w-4 mr-1" />
+                          Download
+                        </Button>
                       </div>
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4 mr-1" />
-                        Download
-                      </Button>
-                    </div>
-                  ))
+                    ))}
+                    <Pagination
+                      currentPage={documentPage}
+                      totalItems={totalDocuments}
+                      pageSize={DOCUMENTS_PER_PAGE}
+                      onPageChange={setDocumentPage}
+                    />
+                  </>
                 )}
               </div>
             </CardContent>

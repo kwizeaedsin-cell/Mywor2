@@ -23,6 +23,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import RoleManager from '@/components/role/RoleManager';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -238,6 +239,17 @@ const AdminDashboard = () => {
         </div>
         
         <div className="flex items-center space-x-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">Manage Roles</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Role Manager</DialogTitle>
+              </DialogHeader>
+              <RoleManager onClose={() => {}} />
+            </DialogContent>
+          </Dialog>
           <Badge variant="outline" className="bg-blue-50">
             <UserCheck className="h-3 w-3 mr-1" />
             Administrator
