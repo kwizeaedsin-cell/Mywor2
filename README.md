@@ -71,3 +71,22 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+
+Hosting (GitHub Pages)
+----------------------
+
+This repository includes a GitHub Actions workflow at `.github/workflows/deploy_pages.yml` which:
+
+- Runs on pushes to `main`.
+- Installs dependencies with `npm ci` and runs `npm run build`.
+- Uploads the `dist` folder and publishes it to GitHub Pages.
+
+To enable hosting:
+
+1. Ensure Pages is enabled for the `main` branch in your repository Settings → Pages.
+2. The workflow will build and deploy automatically on push to `main`.
+
+Notes:
+
+- If your app uses environment variables for Supabase, store them in GitHub Actions secrets and adapt the workflow to inject them at build time (for example by writing a `.env` file before build).
+- The workflow copies `dist/index.html` to `dist/404.html` to provide SPA fallback routing.
