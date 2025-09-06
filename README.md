@@ -90,3 +90,13 @@ Notes:
 
 - If your app uses environment variables for Supabase, store them in GitHub Actions secrets and adapt the workflow to inject them at build time (for example by writing a `.env` file before build).
 - The workflow copies `dist/index.html` to `dist/404.html` to provide SPA fallback routing.
+
+Required GitHub Secrets
+-----------------------
+
+Set the following repository secrets for the Pages workflow to inject at build time:
+
+- `VITE_SUPABASE_URL` — your Supabase project URL (for example: https://xyz.supabase.co)
+- `VITE_SUPABASE_PUBLISHABLE_KEY` — your Supabase anon/public key
+
+Add them in the repository Settings → Secrets and variables → Actions.
