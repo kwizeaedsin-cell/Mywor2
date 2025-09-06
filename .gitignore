@@ -29,3 +29,7 @@ test-results/
 playwright-report/
 **/playwright-report/
 **/test-results/
+
+# Runtime PIDs
+dev-server.pid
+localtunnel.pid
