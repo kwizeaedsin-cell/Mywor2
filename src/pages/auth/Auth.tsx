@@ -14,6 +14,18 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const formatAuthError = (err: any) => {
+    if (!err) return null;
+    // Some Supabase responses put the human message in different fields
+    const message = err.message ?? err.msg ?? err.error_description ?? null;
+    const code = err.code ?? err.error_code ?? err.name ?? null;
+    if (message && code) return `${message} (${code})`;
+    if (message) return message;
+    if (code) return String(code);
+    return String(err);
+  };
 
   if (user) {
     return <Navigate to="/" replace />;
@@ -22,7 +34,16 @@ const Auth = () => {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    await signIn(email, password);
+    setErrorMsg(null);
+    try {
+      const res = await signIn(email, password);
+      console.debug('signIn response:', res);
+      const formatted = formatAuthError(res?.error);
+      if (formatted) setErrorMsg(formatted);
+    } catch (err) {
+      console.error('signIn threw:', err);
+      setErrorMsg(formatAuthError(err) ?? ((err as Error)?.message ?? String(err)));
+    }
     setIsLoading(false);
   };
 
@@ -32,14 +53,30 @@ const Auth = () => {
       return;
     }
     setIsLoading(true);
-    await signUp(email, password);
+    try {
+      const res = await signUp(email, password);
+      console.debug('signUp response:', res);
+      const formatted = formatAuthError(res?.error);
+      if (formatted) setErrorMsg(formatted);
+    } catch (err) {
+      console.error('signUp threw:', err);
+      setErrorMsg(formatAuthError(err) ?? ((err as Error)?.message ?? String(err)));
+    }
     setIsLoading(false);
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    await resetPassword(email);
+    try {
+      const res = await resetPassword(email);
+      console.debug('resetPassword response:', res);
+      const formatted = formatAuthError(res?.error);
+      if (formatted) setErrorMsg(formatted);
+    } catch (err) {
+      console.error('resetPassword threw:', err);
+      setErrorMsg(formatAuthError(err) ?? ((err as Error)?.message ?? String(err)));
+    }
     setIsLoading(false);
   };
 
@@ -103,6 +140,11 @@ const Auth = () => {
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'Signing in...' : 'Sign In'}
                   </Button>
+                  {errorMsg && (
+                    <div className="text-sm text-red-600 mt-2" role="alert">
+                      {errorMsg}
+                    </div>
+                  )}
                 </form>
               </TabsContent>
 

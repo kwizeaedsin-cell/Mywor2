@@ -7,8 +7,8 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string) => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: any; data?: any }>;
+  signUp: (email: string, password: string) => Promise<{ error: any; data?: any }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: any }>;
 }
@@ -41,51 +41,91 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    
+
+    const format = (err: any) => {
+      if (!err) return null;
+      const message = err.message ?? err.msg ?? err.error_description ?? null;
+      const code = err.code ?? err.error_code ?? err.name ?? null;
+      if (message && code) return `${message} (${code})`;
+      if (message) return message;
+      if (code) return String(code);
+      return String(err);
+    };
+
+    const formatted = format(error);
     if (error) {
       toast({
-        title: "Login Failed",
-        description: error.message,
-        variant: "destructive",
+        title: 'Login Failed',
+        description: formatted ?? String(error),
+        variant: 'destructive',
       });
+      return { error };
     }
-    
-    return { error };
+
+    // Update local auth state immediately when sign in succeeds
+    setSession(data.session ?? null);
+    setUser(data.session?.user ?? null);
+
+    toast({
+      title: 'Signed in',
+      description: 'Welcome back!',
+    });
+
+    return { error: null, data };
   };
 
   const signUp = async (email: string, password: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: redirectUrl
-      }
+        emailRedirectTo: redirectUrl,
+      },
     });
-    
+
+    const format = (err: any) => {
+      if (!err) return null;
+      const message = err.message ?? err.msg ?? err.error_description ?? null;
+      const code = err.code ?? err.error_code ?? err.name ?? null;
+      if (message && code) return `${message} (${code})`;
+      if (message) return message;
+      if (code) return String(code);
+      return String(err);
+    };
+
+    const formatted = format(error);
     if (error) {
       toast({
-        title: "Sign Up Failed",
-        description: error.message,
-        variant: "destructive",
+        title: 'Sign Up Failed',
+        description: formatted ?? String(error),
+        variant: 'destructive',
       });
-    } else {
-      toast({
-        title: "Check your email",
-        description: "Please check your email for verification link",
-      });
+      return { error };
     }
-    
-    return { error };
+
+    // If signUp returns a session (depends on Supabase settings), update state
+    setSession(data.session ?? null);
+    setUser(data.session?.user ?? null);
+
+    toast({
+      title: 'Check your email',
+      description: 'Please check your email for verification link',
+    });
+
+    return { error: null, data };
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Clear local state immediately
+    setUser(null);
+    setSession(null);
+
     toast({
       title: "Signed out",
       description: "You have been signed out successfully",
@@ -96,20 +136,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
-    
+
+    const format = (err: any) => {
+      if (!err) return null;
+      const message = err.message ?? err.msg ?? err.error_description ?? null;
+      const code = err.code ?? err.error_code ?? err.name ?? null;
+      if (message && code) return `${message} (${code})`;
+      if (message) return message;
+      if (code) return String(code);
+      return String(err);
+    };
+
+    const formatted = format(error);
     if (error) {
       toast({
-        title: "Reset Failed",
-        description: error.message,
-        variant: "destructive",
+        title: 'Reset Failed',
+        description: formatted ?? String(error),
+        variant: 'destructive',
       });
     } else {
       toast({
-        title: "Check your email",
-        description: "Password reset link has been sent to your email",
+        title: 'Check your email',
+        description: 'Password reset link has been sent to your email',
       });
     }
-    
+
     return { error };
   };
 
